@@ -41,8 +41,8 @@
 # committed to GitHub.
 
 # ============================ FUNCTIONS ==============================
-# Functions for Parts 2-6: objective, derivatives, derivative tests,
-# and the per-lambda fit used in the grid search.
+# Functions used throughout the practical: objective, derivatives, 
+# derivative tests, and the per-lambda fit used in the grid search.
 poisson_lasso_objective <- function(beta,
                                     y,
                                     lambda = 1,
@@ -209,10 +209,6 @@ fit_poisson_lasso <- function(y, lambda, beta_start) {
 
 
 # ========================== MAIN ANALYSIS ============================
-
-# ---------------------------------------------------------------------
-# Part 1. Simulate data
-# ---------------------------------------------------------------------
 # Simulate Poisson changepoint data.
 set.seed(12345)
 n <- 100
@@ -235,18 +231,12 @@ lines(mu_true,
       type = "s")
 abline(v = tau_true[-c(1, length(tau_true))], lty = "dashed")
 
-# ---------------------------------------------------------------------
-# Part 2. Check derivatives by finite differencing
-# ---------------------------------------------------------------------
 # Check the gradient and Hessian using finite differences.
 grad_error <- first_derivative_test(c(log(2), 0, log(5), 0), c(1, 2, 3, 4))
 hess_error <- second_derivative_test(c(log(2), 0, log(5), 0), c(1, 2, 3, 4))
 print(c(gradient = grad_error, hessian = hess_error))
 # The small differences support the analytical derivatives.
 
-# ---------------------------------------------------------------------
-# Part 3. Initial fit (lambda = 1)
-# ---------------------------------------------------------------------
 # Fit the initial model using BFGS with lambda = 1.
 beta_initial <- numeric(n)
 beta_initial[1] <- log(mean(y))
@@ -287,9 +277,6 @@ legend("bottomleft",
        bty = "n",
        cex = 0.6)
 
-# ---------------------------------------------------------------------
-# Part 4. Choose lambda by mBIC
-# ---------------------------------------------------------------------
 # Try a grid of lambda values and choose the one with the lowest mBIC.
 log_lambda <- seq(-1, 5, by = 0.05)
 len_log_lambda <- length(log_lambda)
@@ -368,9 +355,6 @@ par(mfrow = c(1, 1))
 # penalise changes more strongly and therefore give fewer changepoints.
 # The red dashed line marks the selected lambda.
 
-# ---------------------------------------------------------------------
-# Part 5. Best fit and estimated changepoints
-# ---------------------------------------------------------------------
 # Use the best fit to estimate the changepoints.
 # best_fit is the converged fit already obtained at lambda_hat in Part 4,
 # so it is reused here instead of running optim() again.
@@ -452,9 +436,6 @@ legend("top",
        bty = "n",
        cex = 0.8)
 
-# ---------------------------------------------------------------------
-# Part 6. Parametric bootstrap and bias correction
-# ---------------------------------------------------------------------
 # Parametric bootstrap and uncertainty estimation.
 set.seed(55555)
 b <- 200
@@ -557,9 +538,6 @@ CQU <- 2 * mu_hat - QL
 # Check that the lower bounds do not exceed the upper bounds.
 print(all(CQL <= CQU))
 
-# ---------------------------------------------------------------------
-# Part 7. Final plot: bias-corrected mean and confidence bounds
-# ---------------------------------------------------------------------
 # Compare the true, fitted and bias-corrected mean functions.
 # Add the pointwise 95% confidence bounds.
 par(mar = c(5, 4, 4, 15))
@@ -613,3 +591,4 @@ print(sum(CQL < 0))
 
 print(mean(abs(correctmu - mu_true)))
 # Bias correction reduces the MAE for this simulated dataset.
+
