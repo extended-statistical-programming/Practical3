@@ -1,4 +1,3 @@
-graphics.off()
 # ====================================================================
 # Group 7 - Practical 3
 # Team Members:
@@ -24,17 +23,26 @@ graphics.off()
 # Contribution Statement:
 # All team members contributed roughly equally (~33.3% each).
 # 1. Jiayi Qu: Implemented the penalized objective, gradient and
-#    Hessian, tested the derivatives and performed the initial fit with 
+#    Hessian, tested the derivatives and performed the initial fit with
 #    lambda = 1. Wrote the overview.
-# 2. Ting Wu: 
-# 3. Zimo Xiao: 
+# 2. Ting Wu: Wrote fit_poisson_lasso() to compute the effective
+#    number of changepoints and mBIC, ran the lambda grid search
+#    and selected the optimal penalty by minimising mBIC.
+#    Estimated the number and locations of changepoints and
+#    produced the mBIC and best-fit plots.
+# 3. Zimo Xiao: Implemented the parametric bootstrap with 200 replications,
+#    calculated the bias-corrected mean estimates and 95% basic bootstrap
+#    confidence intervals, and produced comparison plots to evaluate the
+#    estimation results.
 
 # Collaborative Efforts:
 # All parts of the practical were thoroughly discussed as a group.
 # Each team member's code was reviewed by the other two after being
 # committed to GitHub.
 
-# ========================FUNCTIONS ================================
+# ============================ FUNCTIONS ==============================
+# Functions for Parts 2-6: objective, derivatives, derivative tests,
+# and the per-lambda fit used in the grid search.
 poisson_lasso_objective <- function(beta,
                                     y,
                                     lambda = 1,
@@ -108,7 +116,7 @@ poisson_lasso_hess <- function(beta,
   # beta - The parameter vector of length n.
   # y - Observed data vector.
   # lambda - The penalty parameter λ (default: 1).
-  # eps - The smoothing parameter ϵ for approximating 
+  # eps - The smoothing parameter ϵ for approximating
   # the absolute function (default: 1e-6).
   # Outputs:
   # Hessian matrix with respect to beta.
@@ -142,7 +150,7 @@ second_derivative_test <- function(beta_test, y_test, h = 1e-6) {
     beta_minus[j] <- beta_minus[j] - h
     grad_plus <- poisson_lasso_grad(beta_plus, y_test)
     grad_minus <- poisson_lasso_grad(beta_minus, y_test)
-    H_fd[,j] <- (grad_plus - grad_minus) / (2 * h)
+    H_fd[, j] <- (grad_plus - grad_minus) / (2 * h)
   }
   H_test <- poisson_lasso_hess(beta_test, y_test)
   return(max(abs(H_fd - H_test)))
@@ -158,7 +166,7 @@ fit_poisson_lasso <- function(y, lambda, beta_start) {
   # A list with:
   # beta - The fitted parameters.
   # mu - The fitted mean at each time point.
-  # convergence - 0 if the optimizer finished successfully.
+  # convergence - 0 if the optimizer reported successful convergence.
   # m_tilde - The effective number of changepoints.
   # mbic - The mBIC score (lower is better).
   
@@ -177,9 +185,11 @@ fit_poisson_lasso <- function(y, lambda, beta_start) {
   beta <- fit$par
   mu <- exp(cumsum(beta))
   
-  # EDF is a soft count of parameters: a clear jump counts about 1,
-  # a jump shrunk to zero counts about 0.
-  # beta_1 (the starting level) also counts 1, so subtract 1 to get the
+  # EDF = trace(H_lambda^{-1} H_0), where H_lambda and H_0 are the Hessians
+  # with and without the penalty at the fitted beta. solve(H_lambda, H_0)
+  # gives H_lambda^{-1} H_0 and sum(diag(...)) takes its trace.
+  # A clear jump contributes about 1 and a jump shrunk to zero about 0.
+  # beta_1 (the baseline level) also counts 1, so subtract 1 to get the
   # effective number of changepoints.
   H_lambda <- poisson_lasso_hess(beta, y, lambda = lambda)
   H_0 <- poisson_lasso_hess(beta, y, lambda = 0)
@@ -198,17 +208,21 @@ fit_poisson_lasso <- function(y, lambda, beta_start) {
 }
 
 
-# ==================== MAIN ANALYSIS ===================================
+# ========================== MAIN ANALYSIS ============================
+
+# ---------------------------------------------------------------------
+# Part 1. Simulate data
+# ---------------------------------------------------------------------
 # Simulate Poisson changepoint data.
 set.seed(12345)
 n <- 100
 time <- 1:n
 # cpt positions (with tau_0 and tau_{m+1})
-tau_true <- c(1, 30, 70, n + 1) 
+tau_true <- c(1, 30, 70, n + 1)
 # number of cpts (m)
 m_true <- length(tau_true) - 2
 # segment parameters (theta_1, theta_2, theta_3)
-theta_true <- c(10, 2, 7) 
+theta_true <- c(10, 2, 7)
 ## mean function
 mu_true <- numeric(n)
 for (i in seq_along(theta_true))
@@ -221,17 +235,23 @@ lines(mu_true,
       type = "s")
 abline(v = tau_true[-c(1, length(tau_true))], lty = "dashed")
 
+# ---------------------------------------------------------------------
+# Part 2. Check derivatives by finite differencing
+# ---------------------------------------------------------------------
 # Check the gradient and Hessian using finite differences.
 grad_error <- first_derivative_test(c(log(2), 0, log(5), 0), c(1, 2, 3, 4))
 hess_error <- second_derivative_test(c(log(2), 0, log(5), 0), c(1, 2, 3, 4))
 print(c(gradient = grad_error, hessian = hess_error))
 # The small differences support the analytical derivatives.
 
+# ---------------------------------------------------------------------
+# Part 3. Initial fit (lambda = 1)
+# ---------------------------------------------------------------------
 # Fit the initial model using BFGS with lambda = 1.
 beta_initial <- numeric(n)
 beta_initial[1] <- log(mean(y))
-fit <- optim(par = beta_initial, 
-             fn = poisson_lasso_objective, 
+fit <- optim(par = beta_initial,
+             fn = poisson_lasso_objective,
              gr = poisson_lasso_grad,
              lambda = 1,
              y = y,
@@ -245,7 +265,7 @@ max(abs(poisson_lasso_grad(fit$par, y)))
 
 # Evaluate the mean function from the parameter estimates.
 mu_hat <- exp(cumsum(fit$par))
-# Plot the data (y) and add both the true (mu_true) and 
+# Plot the data (y) and add both the true (mu_true) and
 # estimated (mu_hat) mean functions.
 # The diagram shows that the estimated mean function
 # captures the main changes near times 30 and 70,
@@ -255,9 +275,9 @@ lines(mu_true,
       col = "black",
       lwd = 2,
       type = "s")
-lines(mu_hat, 
-      col = "red", 
-      lwd = 2, 
+lines(mu_hat,
+      col = "red",
+      lwd = 2,
       type = "s")
 abline(v = tau_true[-c(1, length(tau_true))], lty = "dashed")
 legend("bottomleft",
@@ -267,6 +287,9 @@ legend("bottomleft",
        bty = "n",
        cex = 0.6)
 
+# ---------------------------------------------------------------------
+# Part 4. Choose lambda by mBIC
+# ---------------------------------------------------------------------
 # Try a grid of lambda values and choose the one with the lowest mBIC.
 log_lambda <- seq(-1, 5, by = 0.05)
 len_log_lambda <- length(log_lambda)
@@ -288,8 +311,10 @@ grid_time <- system.time(
     m_tilde[i] <- grid_fit$m_tilde
     convergence[i] <- grid_fit$convergence
     
-    # Remember the best fit so far, so part 5 can reuse it.
-    if (mbic[i] == min(mbic[1:i]))
+    # Remember the best fit so far, so Part 5 can reuse it.
+    # Update only on a strictly smaller mBIC, so ties keep the first
+    # minimum, matching which.min() below.
+    if (i == 1 || mbic[i] < min(mbic[seq_len(i - 1)]))
       best_fit <- grid_fit
     
     # Start the next fit from the current solution to save time.
@@ -307,10 +332,8 @@ all(convergence == 0)
 lambda_hat <- exp(log_lambda[which.min(mbic)])
 lambda_hat
 
-# All fits converged in about 1-2 seconds. The selected lambda is about 21.12
-# (log(lambda) = 3.05), which lies inside the search grid rather than
-# at one of its boundaries.
-
+# All fits reported convergence. The selected lambda lies
+# inside the search grid rather than at its boundaries.
 
 # Plot mBIC and the effective number of changepoints against log(lambda).
 par(mfrow = c(1, 2))
@@ -345,10 +368,12 @@ par(mfrow = c(1, 1))
 # penalise changes more strongly and therefore give fewer changepoints.
 # The red dashed line marks the selected lambda.
 
-
-# 5. Use the best fit to estimate the changepoints.
-
-# The fit at the best lambda was saved above, so no refitting is needed.
+# ---------------------------------------------------------------------
+# Part 5. Best fit and estimated changepoints
+# ---------------------------------------------------------------------
+# Use the best fit to estimate the changepoints.
+# best_fit is the converged fit already obtained at lambda_hat in Part 4,
+# so it is reused here instead of running optim() again.
 best_fit$convergence
 
 beta_hat <- best_fit$beta
@@ -357,10 +382,9 @@ mu_hat <- best_fit$mu
 # Estimate the number of changepoints by rounding m_tilde down.
 m_hat <- floor(best_fit$m_tilde)
 
-# The estimated changepoints are the times with the largest |beta_k|.
-# beta_1 is the starting level rather than a changepoint, so it is excluded.
-# After removing beta_1, add 1 to convert positions back to time points.
-# seq_len(m_hat) is empty when m_hat = 0, avoiding incorrect indexing.
+# Select the m_hat largest absolute jumps, excluding beta_1.
+# Add 1 to convert their indices back to time points.
+# seq_len(m_hat) also handles the case of no changepoints.
 tau_hat <- sort(
   order(abs(beta_hat[-1]), decreasing = TRUE)[seq_len(m_hat)] + 1
 )
@@ -374,9 +398,9 @@ c(m_tilde = best_fit$m_tilde,
 
 # Display the estimated changepoint locations.
 tau_hat
-# 4 changepoints are found, at times 30, 69, 70 and 72 (truth: 30 and 70).
-# The jump at 30 is found exactly; the jump at 70 is split into three
-# small steps.
+# Four changepoints are estimated, at times 30, 69, 70 and 72
+# (truth: 30 and 70). The first true changepoint is recovered exactly;
+# near the second, several adjacent changepoints are estimated.
 
 
 # Plot the data, true and estimated mean functions, and changepoints.
@@ -428,16 +452,22 @@ legend("top",
        bty = "n",
        cex = 0.8)
 
+# ---------------------------------------------------------------------
+# Part 6. Parametric bootstrap and bias correction
+# ---------------------------------------------------------------------
 # Parametric bootstrap and uncertainty estimation.
 set.seed(55555)
 b <- 200
+# Cap the total number of fitting attempts so the loop always terminates.
+max_attempts <- 1000
 # Initialize storage for bootstrap estimates.
 sample_matrix <- matrix(data = NA, nrow = b, ncol = n)
 
 i <- 1
 j <- 0
-while (i <= b) {
-  # Repeat until b converged bootstrap fits are obtained.
+while (i <= b && j < max_attempts) {
+  # Repeat until b converged bootstrap fits are obtained,
+  # or until max_attempts fits have been tried.
   # Simulate Poisson data using the fitted mean.
   y_sim <- rpois(n, mu_hat)
   fit_boot <- optim(
@@ -449,7 +479,7 @@ while (i <= b) {
     method = "BFGS",
     control = list(maxit = 5000, reltol = 1e-9)
   )
-  # Store the fitted mean only if BFGS reports convergence. 
+  # Store the fitted mean only if BFGS reports convergence.
   if (fit_boot$convergence == 0) {
     eta <- cumsum(fit_boot$par)
     mu <- exp(eta)
@@ -457,15 +487,20 @@ while (i <= b) {
     i <- i + 1
   }
   # Count all fitting attempts.
-  j <- j + 1 
+  j <- j + 1
+}
+
+# If the attempt limit was reached first, keep only the converged fits.
+n_success <- i - 1
+if (n_success < b) {
+  warning("Only ", n_success, " of ", b,
+          " bootstrap fits converged within ", max_attempts, " attempts.")
+  sample_matrix <- sample_matrix[seq_len(n_success), , drop = FALSE]
 }
 
 # Count the bootstrap fits that did not converge.
 # All 200 fits converged in the test using seed 55555.
-# No attempt limit is imposed, so repeated failures could
-# prevent the loop from terminating.
-# A maximum number of attempts could be added if needed.
-fail_fits <- j - b
+fail_fits <- j - n_success
 print(fail_fits)
 
 # Average the bootstrap estimates at each time point.
@@ -494,7 +529,7 @@ lines(time, colmean,
       lwd = 2)
 legend("topright",
        inset = c(-0.31, 0),
-       legend = c("Data", "True Mean", 
+       legend = c("Data", "True Mean",
                   "Fitted Mean", "Bootstrap Mean"),
        col = c("grey", "black", "red", "blue"),
        pch = c(16, NA, NA, NA),
@@ -504,31 +539,34 @@ legend("topright",
        cex = 0.8)
 print(mean(abs(mu_hat - mu_true)))
 print(mean(abs(colmean - mu_true)))
-# The fitted mean captures the main changes near times 30 and 70. 
+# The fitted mean captures the main changes near times 30 and 70.
 # The bootstrap average is smoother near the changepoints
 # and deviates further from the true mean in parts of the series.
-# This reflects bias from penalisation and 
+# This reflects bias from penalisation and
 # motivates the bootstrap bias correction.
 
 # Correct the fitted mean using the bootstrap bias estimate.
-correctmu <- 2 *mu_hat - colmean
+correctmu <- 2 * mu_hat - colmean
 
 # Compute the pointwise 95% basic bootstrap confidence intervals.
-CI <- apply(sample_matrix, 2, FUN = quantile, probs = c(0.025,0.975))
-QL <- CI[1,]
-QU <- CI[2,]
-CQL <- 2* mu_hat - QU
-CQU <- 2* mu_hat - QL
+CI <- apply(sample_matrix, 2, FUN = quantile, probs = c(0.025, 0.975))
+QL <- CI[1, ]
+QU <- CI[2, ]
+CQL <- 2 * mu_hat - QU
+CQU <- 2 * mu_hat - QL
 
 # Check that the lower bounds do not exceed the upper bounds.
 print(all(CQL <= CQU))
 
+# ---------------------------------------------------------------------
+# Part 7. Final plot: bias-corrected mean and confidence bounds
+# ---------------------------------------------------------------------
 # Compare the true, fitted and bias-corrected mean functions.
 # Add the pointwise 95% confidence bounds.
-par(mar = c(5, 4, 4,15))
+par(mar = c(5, 4, 4, 15))
 plot(time, y,
      main = "Bias-corrected Mean and Confidence Intervals",
-     ylim = range(c(y, mu_true, mu_hat, 
+     ylim = range(c(y, mu_true, mu_hat,
                     correctmu, CQL, CQU)),
      pch = 16,
      col = "grey",
@@ -556,8 +594,8 @@ lines(time, CQU,
       lty = 2)
 legend("topright",
        inset = c(-0.45, 0),
-       legend = c("Data", "True Mean", "Fitted Mean", 
-                  "Bias-Corrected Mean", 
+       legend = c("Data", "True Mean", "Fitted Mean",
+                  "Bias-Corrected Mean",
                   "95% Bias-corrected CI"),
        col = c("grey", "black", "red", "green", "blue"),
        pch = c(16, NA, NA, NA, NA),
