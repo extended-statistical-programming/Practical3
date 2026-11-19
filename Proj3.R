@@ -494,10 +494,9 @@ while (i <= b && j < max_attempts) {
 n_success <- i - 1
 if (n_success < b) {
   stop("Only ", n_success, " of ", b,
-          " bootstrap fits converged within ", max_attempts, " attempts.")
+      " bootstrap fits converged within ", max_attempts, " attempts.")
 }
   
-
 # Count the bootstrap fits that did not converge.
 # All 200 fits converged in the test using seed 55555.
 fail_fits <- j - n_success
