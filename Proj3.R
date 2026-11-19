@@ -490,13 +490,13 @@ while (i <= b && j < max_attempts) {
   j <- j + 1
 }
 
-# If the attempt limit was reached first, keep only the converged fits.
+# Stop if fewer than b bootstrap fits converged.
 n_success <- i - 1
 if (n_success < b) {
-  warning("Only ", n_success, " of ", b,
+  stop("Only ", n_success, " of ", b,
           " bootstrap fits converged within ", max_attempts, " attempts.")
-  sample_matrix <- sample_matrix[seq_len(n_success), , drop = FALSE]
 }
+  
 
 # Count the bootstrap fits that did not converge.
 # All 200 fits converged in the test using seed 55555.
